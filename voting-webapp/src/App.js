@@ -16,6 +16,7 @@ const Web3 = require('web3');
 function App() {
   const [currentStack, setCurrentStack] = useState(-1);
   const [stackInfo, setStackInfo] = useState([0, 0, false]);
+  const [ownerAddress, setOwnerAddress] = useState('');
   const [isOwner, setIsOwner] = useState(false);
   const [proposalList, setProposalList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -47,7 +48,7 @@ function App() {
   const [newOwnerAddress, setNewOwnerAddress] = useState('');
   //SMART CONTRACT ADDRESS
   const eVotingTokenAddress = '0x4ED2EA698bB9A74c01EE3EC19F4bE85350ED9856';
-  const scAddress = '0x4Ce051edB436FF64dBa811472d337269366EE405';
+  const scAddress = '0xae25378Ea5a1cad897803788c193E5ADacD0aB60';
 
   // const host = 'http://localhost:8545'; //it can change to infura.
   const host = 'https://ropsten.infura.io/v3/93594fc6a4c94dff8e22b0044ad59db1';
@@ -56,6 +57,9 @@ function App() {
   useEffect(() => {
     async function fetchData() {
       setLoading(true);
+      const ownerAddressResult = await getOwner();
+      console.log({ ownerAddressResult });
+      setOwnerAddress(ownerAddressResult);
       const balance = await getAccountBalance();
       setTokenBalance(balance);
       const currentStackResult = await getCurrentStack();
@@ -71,13 +75,24 @@ function App() {
     fetchData();
   }, [reload]);
 
+  const getOwner = () => {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const { contract } = await initVotingContract();
+        const owner = await contract.methods.delegate().call();
+        resolve(owner);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  };
+
   const isSmartContractOwner = () => {
     return new Promise(async(resolve, reject) => {
       try {
         const { contract } = await initVotingContract();
         const { account } = await getCurrentAccount();
-        const owner = await contract.methods.owner().call();
-        console.log(owner);
+        const owner = await contract.methods.delegate().call();
         if (account === owner) resolve(true);
         resolve(false);
       } catch (err) {
@@ -128,12 +143,12 @@ function App() {
   };
 
   const initTokenContract = async () => {
-    // const provider = new HDWalletProvider(
-    //   mnemonic,
-    //   host
-    // );
+    const provider = new HDWalletProvider(
+      mnemonic,
+      host
+    );
 
-    const provider = new Web3.providers.HttpProvider(host);
+    // const provider = new Web3.providers.HttpProvider(host);
 
     const web3 = new Web3(provider);
     const eToken = await new web3.eth.Contract(eVotingTokenContract.abi, eVotingTokenAddress);
@@ -144,11 +159,11 @@ function App() {
     
     // const web3 = new Web3(host);
     // web3EthCont.setProvider(host);
-    // const provider = new HDWalletProvider(
-    //   mnemonic,
-    //   host
-    // );
-    const provider = new Web3.providers.HttpProvider(host);
+    const provider = new HDWalletProvider(
+      mnemonic,
+      host
+    );
+    // const provider = new Web3.providers.HttpProvider(host);
 
     // await window.ethereum.enable();
     const web3 = new Web3(provider);
@@ -200,8 +215,8 @@ function App() {
         console.log({ accountData });
         const { account, web3 } = accountData;
         
-        const resultProposal = await contract.methods.castVote(addressToVote, support, 0).send({
-          from: account,
+        const resultProposal = await contract.methods.castVote(addressToVote, support, 0, account).send({
+          from: ownerAddress,
         });
         console.log({ resultProposal });
        
@@ -254,6 +269,8 @@ function App() {
       try {
         const txContract = await initVotingContract();
         const { contract, gasLimit } = txContract;
+        const accountData = await getCurrentAccount();
+        const { account } = accountData;
         const owner = await contract.methods.owner().call();
         setLoading(true);
         const resultProposalStack = await contract.methods.newProposalStack(
@@ -261,10 +278,10 @@ function App() {
           moment(proposalStackInfo.expirationDate).format('YYYY/MM/DD'),
           moment(proposalStackInfo.expirationDate).toDate().getTime(),
           proposalStackInfo.stackRewardLimit,
+          account,
         ).send({
-          from: owner,
+          from: ownerAddress,
         });
-        console.log({ resultProposalStack });
         setReload(reload + 1);
         resolve(resultProposalStack);
       } catch (err) {
@@ -284,9 +301,9 @@ function App() {
         const currentDate = new Date().getTime();
         setLoading(true);
         const resultProposal = await contract.methods.registerProposal(
-          1, newProposalInfo.description, newProposalInfo.proposalRequirement, newProposalInfo.name,
+          1, newProposalInfo.description, newProposalInfo.proposalRequirement, newProposalInfo.name, account
         ).send({
-          from: account,
+          from: ownerAddress,
         });
         setReload(reload + 1);
         resolve(resultProposal);
@@ -304,7 +321,7 @@ function App() {
         const { contract } = await initVotingContract();
         const accountData = await getCurrentAccount();
         const { account, web3 } = accountData;
-        const resultWinners = await contract.methods.reviewWinningProposals().send({from: account});
+        const resultWinners = await contract.methods.reviewWinningProposals(account).send({from: ownerAddress});
         console.log({resultWinners});
         setReload(reload + 1);
         resolve(resultWinners);

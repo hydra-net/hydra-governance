@@ -60,6 +60,7 @@ contract NewVotingContract {
     address[] public proposalAddress;
     uint public proposalCount = 0;
     address public owner;
+    address public delegate;
     address private tokenAddress;
     eVotingToken token;
     address[] public acceptedProposal;
@@ -79,6 +80,7 @@ contract NewVotingContract {
    
     constructor(address _tokenAddress) public {
         owner = msg.sender;
+        delegate = msg.sender;
         tokenAddress = _tokenAddress;
         activeStack = 0;
         number = 10;
@@ -91,9 +93,14 @@ contract NewVotingContract {
         });
     }
 
-    modifier onlyOwner() {
-        require(msg.sender == owner);
-        _;
+    function onlyDelegate (address _account) internal returns (bool) {
+        return _account == delegate;
+    }
+
+    function setOwnerDelegate(address newOwner, address _account) public returns(bool) {
+        require (onlyDelegate(_account), "You need to be a delegate to use this function");
+        owner = newOwner;
+        return true;
     }
 
     function setNumber(uint newNumber) public returns (bool, uint) {
@@ -105,8 +112,10 @@ contract NewVotingContract {
         string memory _openDate,
         string memory _expirationDate,
         uint _expiration,
-        uint _stackReward
-    ) public onlyOwner returns (uint) {
+        uint _stackReward,
+        address _account
+    ) public returns (uint) {
+        require (onlyDelegate(_account), "You need to be a delegate to use this function");
         // Before create one ProposalStack we are closing each "active" stack.
         if (activeStack > 0) {
             for (uint i = 0; i < activeStack; i++) {
@@ -224,7 +233,8 @@ contract NewVotingContract {
         uint _currentDate,
         string memory _description,
         uint _proposalRequirement,
-        string memory _name
+        string memory _name,
+        address _account
     ) public returns (uint) {
         token = eVotingToken(tokenAddress);
         //Check if there are proposalStacks
@@ -233,21 +243,21 @@ contract NewVotingContract {
         require (proposalStackMapping[activeStack - 1].expiration > _currentDate, "Active proposal stack expiration date is reached, wait till we register a new proposal stack");
        
        // Check if sender has a proposal already sended to current activeStack.
-        require (proposalStackMapping[activeStack - 1].proposalsMap[msg.sender].proposalRegistered == false, "You already have one registered proposal");
+        require (proposalStackMapping[activeStack - 1].proposalsMap[_account].proposalRegistered == false, "You already have one registered proposal");
        
         //Check if sender has available tokens
-        uint balance = token.balanceFor(msg.sender);
-        emit CheckTokenBalance(msg.sender, balance);
-        require (token.balanceFor(msg.sender) > def.defaultProposalStake, "You don't have enough eVotingTokens to make a proposal");
+        uint balance = token.balanceFor(_account);
+        emit CheckTokenBalance(_account, balance);
+        require (token.balanceFor(_account) > def.defaultProposalStake, "You don't have enough eVotingTokens to make a proposal");
        
-        //Check if msg.sender has a vote (proposalOwners can't send proposals)
-        // require(!senderHasVoted(msg.sender), "Voters cannot send a proposal, wait till the next proposal stack");
+        //Check if _account has a vote (proposalOwners can't send proposals)
+        // require(!senderHasVoted(_account), "Voters cannot send a proposal, wait till the next proposal stack");
        
         // Check proposalRequirement
         require(_proposalRequirement <=  def.defaultRequirementLimit, "Your requirement is over the default limit (1000 is the limit)");
        
         // Add sender address to  proposals
-        proposalStackMapping[activeStack - 1].proposals.push(msg.sender);
+        proposalStackMapping[activeStack - 1].proposals.push(_account);
        
         //
         proposalCount++;
@@ -256,7 +266,7 @@ contract NewVotingContract {
         Proposal memory newProposal = Proposal({
             id: proposalCount,
             proposalName: _name,
-            proposalOwner: msg.sender,
+            proposalOwner: _account,
             proposalDesc: _description,
             countNo: 0,
             countYes: 0,
@@ -271,13 +281,13 @@ contract NewVotingContract {
         });
 
         // Add proposal into proposals at stack
-        proposalStackMapping[activeStack - 1].proposalsMap[msg.sender] = newProposal;
+        proposalStackMapping[activeStack - 1].proposalsMap[_account] = newProposal;
        
         // Set new value of proposalCount adding 1
         proposalStackMapping[activeStack - 1].proposalCount ++;
        
         // Stake token to the owner of smart contract
-        token.transferFrom(msg.sender, owner, def.defaultProposalStake);
+        token.transferFrom(_account, owner, def.defaultProposalStake);
        
         return proposalStackMapping[activeStack - 1].proposalCount;
     }
@@ -285,7 +295,8 @@ contract NewVotingContract {
     function castVote(
         address proposalAddressToVote,
         bool support,
-        uint _currentDate
+        uint _currentDate,
+        address _account
     ) public returns (uint) {
         token = eVotingToken(tokenAddress);
         //Check if there are proposalStacks
@@ -293,14 +304,14 @@ contract NewVotingContract {
         // Check availability of current activeStack
         require (proposalStackMapping[activeStack - 1].expiration > _currentDate, "Active proposal stack expiration date is reached, wait till we register a new proposal stack");
         // Check if sender has a proposal (Proposal owners canot vote).
-        require (proposalStackMapping[activeStack - 1].proposalsMap[msg.sender].proposalRegistered == false, "Proposal owners cannot cast votes.");
+        require (proposalStackMapping[activeStack - 1].proposalsMap[_account].proposalRegistered == false, "Proposal owners cannot cast votes.");
          //Check if sender has available tokens to vote
-        require (token.balanceFor(msg.sender) > def.defaultVoteStake, "You don't have enough eVotingTokens to cast a vote");
+        require (token.balanceFor(_account) > def.defaultVoteStake, "You don't have enough eVotingTokens to cast a vote");
         // Check if there is a proposal for the address user selected.
         //require(proposalStackMapping[activeStack - 1].proposalsMap[proposalAddressToVote].stack < activeStack - 1, "There is any proposal to the address yo want to cast your vote");
        
         // TODO: Check if voter has made a vote supporting this proposal. Don't know if a voter can cast multiple votes.
-        address voter = msg.sender;
+        address voter = _account;
         Proposal storage proposalSelected = proposalStackMapping[activeStack - 1].proposalsMap[proposalAddressToVote];
         proposalStackMapping[activeStack - 1].proposalsMap[proposalSelected.proposalOwner].voters.push(msg.sender);
         if (support) {
@@ -320,9 +331,10 @@ contract NewVotingContract {
         return proposalSelected.voteCount;
     }
    
-    function reviewWinningProposals () onlyOwner public returns (uint){
+    function reviewWinningProposals (address _account) public returns (uint){
         // Check if activeStack is not 0
         // require (activeStack == 0, "There is not active stack, create one before review winning proposals");
+        require (onlyDelegate(_account), "You need to be a delegate to use this function");
         // Check if there is activeStack
         require (proposalStackMapping[activeStack - 1].isActive == true, "There is not active stack to review winning proposals");
 
