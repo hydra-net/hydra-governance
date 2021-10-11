@@ -48,7 +48,7 @@ function App() {
   const [newOwnerAddress, setNewOwnerAddress] = useState('');
   //SMART CONTRACT ADDRESS
   const eVotingTokenAddress = '0x4ED2EA698bB9A74c01EE3EC19F4bE85350ED9856';
-  const scAddress = '0xae25378Ea5a1cad897803788c193E5ADacD0aB60';
+  const scAddress = '0x430b1b1fF73393Eabdc6a7f355Fc7bBc5700131F';
 
   // const host = 'http://localhost:8545'; //it can change to infura.
   const host = 'https://ropsten.infura.io/v3/93594fc6a4c94dff8e22b0044ad59db1';

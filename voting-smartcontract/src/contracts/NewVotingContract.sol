@@ -211,7 +211,7 @@ contract NewVotingContract {
             
             //names[i] = current.proposalName;
             
-            pro.descriptions[i] = current.proposalName;
+            pro.descriptions[i] = current.proposalDesc;
             //descriptions[i] = current.proposalDesc;
             pro.names[i] = current.proposalName;
             //requirements[i] = current.proposalRequirement;
